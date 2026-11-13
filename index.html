@@ -219,6 +219,8 @@ body.ko #end .big{font-family:'Black Han Sans',sans-serif}
     <div class="seg"><button class="btn" data-lang="en"><span>English</span></button><button class="btn" data-lang="ko"><span>한국어</span></button></div>
     <div class="lbl"><span data-i="sound">Sound</span></div>
     <div class="seg"><button class="btn" data-sound="1"><span data-i="on">On</span></button><button class="btn" data-sound="0"><span data-i="off">Off</span></button></div>
+    <div class="lbl"><span data-i="orientation">Screen</span></div>
+    <div class="seg"><button class="btn" data-orient="auto"><span data-i="oAuto">Auto</span></button><button class="btn" data-orient="landscape"><span data-i="oLand">Landscape</span></button><button class="btn" data-orient="portrait"><span data-i="oPort">Portrait</span></button></div>
     <div class="actions"><button class="btn small" data-act="back"><span data-i="back">Back</span></button></div>
   </div>
 </section>
@@ -261,11 +263,11 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t, rand=(a,b)=>a+Math.random()*(b-a);
 
 /* ---------- table constants (logical units) ---------- */
-const W=400, H=700, CENTER=H/2, GOAL_W=136, PUCK_R=15, RAIL=20;
+const W=420, H=735, CENTER=H/2, GOAL_W=143, PUCK_R=12.75, RAIL=20; // v2: table +5%, goal +5%, pieces -15%
 const GL=W/2-GOAL_W/2, GR=W/2+GOAL_W/2;
 const PUCK_MAX=1500, FRICTION=0.16, WALL_E=0.9, TOUCH_OFF=48;
-const PLAYER_TYPES={normal:{r:32,speed:5200},small:{r:25,speed:6800},big:{r:42,speed:3800}};
-const CPU_SIZES={small:{r:25,mult:1.15},medium:{r:32,mult:1},big:{r:42,mult:.82}};
+const PLAYER_TYPES={normal:{r:27.2,speed:5200},small:{r:21.25,speed:6800},big:{r:35.7,speed:3800}};
+const CPU_SIZES={small:{r:21.25,mult:1.15},medium:{r:27.2,mult:1},big:{r:35.7,mult:.82}};
 const LEVELS={
   easy:  {speed:620, react:.22,err:34,predict:false,track:.55,smart:false,home:70,attack:320},
   normal:{speed:1000,react:.10,err:14,predict:true, track:.85,smart:false,home:80,attack:520},
@@ -278,6 +280,7 @@ const store={get(k,d){try{const v=localStorage.getItem('smasher.'+k);return v==n
 const settings={
   lang:store.get('lang',(navigator.language||'en').toLowerCase().startsWith('ko')?'ko':'en'),
   sound:store.get('sound',true),
+  orient:store.get('orient','auto'),
   paddle:store.get('paddle','normal'),
   setup:Object.assign({time:120,target:7,sets:1,cpuSize:'medium'},store.get('setup',{}))
 };
@@ -291,7 +294,7 @@ const T={
   cpuPaddle:'Computer paddle',small:'Small',medium:'Medium',big:'Big',random:'Random',start:'Start',
   yourPaddle:'Your paddle',pNormal:'Normal',pSmall:'Small',pBig:'Big',
   pNormalD:'Balanced size and speed.',pSmallD:'Tiny but lightning fast.',pBigD:'A huge wall, but heavy.',
-  size:'Size',speed:'Speed',language:'Language',sound:'Sound',on:'On',off:'Off',
+  size:'Size',speed:'Speed',language:'Language',sound:'Sound',on:'On',off:'Off',orientation:'Screen',oAuto:'Auto',oLand:'Landscape',oPort:'Portrait',
   paused:'Paused',resume:'Resume',quitMenu:'Quit to menu',escHint:'Press Esc to resume',
   goal:'GOAL!',cpuGoal:'CPU SCORES',youWin:'YOU WIN!',youLose:'YOU LOSE',draw:'DRAW',rematch:'Rematch',menu:'Menu',
   set:'SET',setOf:'SET {n} / {m}',you:'YOU',cpu:'CPU',timeUp:"TIME'S UP",ready:'READY',go:'GO!',
@@ -306,7 +309,7 @@ const T={
   cpuPaddle:'컴퓨터 패들 크기',small:'작게',medium:'중간',big:'크게',random:'무작위',start:'시작',
   yourPaddle:'내 패들',pNormal:'기본',pSmall:'작은 패들',pBig:'큰 패들',
   pNormalD:'크기와 속도의 균형.',pSmallD:'작지만 번개처럼 빨라요.',pBigD:'거대한 벽, 하지만 무거워요.',
-  size:'크기',speed:'속도',language:'언어',sound:'소리',on:'켜기',off:'끄기',
+  size:'크기',speed:'속도',language:'언어',sound:'소리',on:'켜기',off:'끄기',orientation:'화면 방향',oAuto:'자동',oLand:'가로',oPort:'세로',
   paused:'일시정지',resume:'계속하기',quitMenu:'메뉴로 나가기',escHint:'Esc를 누르면 계속합니다',
   goal:'골!',cpuGoal:'컴퓨터 득점',youWin:'승리!',youLose:'패배',draw:'무승부',rematch:'재대결',menu:'메뉴',
   set:'세트',setOf:'{n}세트 / {m}',you:'나',cpu:'컴퓨터',timeUp:'시간 종료',ready:'준비',go:'시작!',
@@ -481,7 +484,7 @@ const gc=$('#game'),gx=gc.getContext('2d',{desynchronized:true});let LY={},table
 const COLORS={player:{a:'#7ee8ff',b:'#1aa0f0',c:'#0a4fa8',glow:'rgba(80,200,255,'},cpu:{a:'#ffb0b8',b:'#ff4d5e',c:'#a0122a',glow:'rgba(255,70,100,'}};
 function layout(){
   const dpr=Math.min(2,devicePixelRatio||1),cw=innerWidth,ch=innerHeight,hud=clamp(ch*.085,50,74),pad=10;
-  const rot=cw>ch*1.05; // wide screen: turn the table sideways (you on the left)
+  const rot=settings.orient==='landscape'?true:settings.orient==='portrait'?false:cw>ch*1.05; // landscape: table sideways (you on the left)
   const sw=rot?H:W,sh=rot?W:H;
   const s=Math.min((cw-pad*2)/(sw+RAIL*2),(ch-hud-pad*2)/(sh+RAIL*2));
   LY={dpr,cw,ch,hud,s,rot,tw:(sw+RAIL*2)*s,ox:(cw-sw*s)/2,oy:hud+pad+((ch-hud-pad*2)-(sh+RAIL*2)*s)/2+RAIL*s};
@@ -532,8 +535,8 @@ function buildTable(){
   line('rgba(35,110,215,.6)',3,()=>{x.moveTo(0,H*.25);x.lineTo(W,H*.25);x.moveTo(0,H*.75);x.lineTo(W,H*.75)});
   // goal creases
   for(const [cy,a0,a1,col] of [[0,0,Math.PI,'230,50,80'],[H,Math.PI,Math.PI*2,'35,110,215']]){
-    x.fillStyle=`rgba(${col},.1)`;x.beginPath();x.arc(W/2,cy,92,a0,a1);x.fill();
-    line(`rgba(${col},.85)`,3.5,()=>x.arc(W/2,cy,92,a0,a1))}
+    x.fillStyle=`rgba(${col},.1)`;x.beginPath();x.arc(W/2,cy,97,a0,a1);x.fill();
+    line(`rgba(${col},.85)`,3.5,()=>x.arc(W/2,cy,97,a0,a1))}
   // faceoff dots
   for(const [fx,fy] of [[W*.25,H*.2],[W*.75,H*.2],[W*.25,H*.8],[W*.75,H*.8]]){
     line('rgba(230,50,80,.5)',2,()=>x.arc(fx,fy,26,0,7));x.fillStyle='rgba(230,50,80,.75)';x.beginPath();x.arc(fx,fy,5,0,7);x.fill()}
@@ -672,7 +675,7 @@ function render(){
    ===================================================================== */
 const G={state:'idle',time:0,stateT:0,player:mkPaddle(false),cpu:mkPaddle(true),puck:{x:W/2,y:CENTER,vx:0,vy:0,last:null},
   ps:0,cs:0,sets:[0,0],setNo:1,results:[],timeLeft:0,cfg:null,level:null,banner:null,trail:[],parts:[],rings:[],shake:0,flash:0,demo:false};
-function mkPaddle(top){return{x:W/2,y:top?70:H-70,r:32,vx:0,vy:0,max:2600,top,ptx:W/2,pty:top?70:H-70,tx:W/2,ty:top?70:H-70,think:0,aim:null,stuckT:0}}
+function mkPaddle(top){return{x:W/2,y:top?70:H-70,r:27.2,vx:0,vy:0,max:2600,top,ptx:W/2,pty:top?70:H-70,tx:W/2,ty:top?70:H-70,think:0,aim:null,stuckT:0}}
 const pointer={x:W/2,y:H-80};
 function clampPad(p,o){o.x=clamp(o.x,p.r,W-p.r);o.y=p.top?clamp(o.y,p.r,CENTER-p.r):clamp(o.y,CENTER+p.r,H-p.r);return o}
 function homePaddles(){const pl=G.player,cp=G.cpu;pl.x=pl.ptx=W/2;pl.y=pl.pty=H-75;cp.x=cp.tx=W/2;cp.y=cp.ty=75;pl.vx=pl.vy=cp.vx=cp.vy=0;cp.aim=null;
@@ -855,6 +858,7 @@ let curScreen='menu',pendingLevel='normal';
 function showScreen(id){curScreen=id;$$('.screen').forEach(s=>s.classList.toggle('show',s.id===id));$('#setup').classList.remove('show')}
 function syncSettingsUI(){
   $$('[data-lang]').forEach(b=>b.classList.toggle('on',b.dataset.lang===settings.lang));
+  $$('[data-orient]').forEach(b=>b.classList.toggle('on',b.dataset.orient===settings.orient));
   $$('[data-sound]').forEach(b=>b.classList.toggle('on',(b.dataset.sound==='1')===!!settings.sound));
   $$('#padCards .card').forEach(c=>c.classList.toggle('sel',c.dataset.pad===settings.paddle));
   $$('#cpuSeg .btn').forEach(b=>b.classList.toggle('on',b.dataset.size===settings.setup.cpuSize));
@@ -865,12 +869,13 @@ function syncSettingsUI(){
 function drawPreviews(){$$('#padCards .card').forEach(c=>{const cv=c.querySelector('canvas'),x=cv.getContext('2d');x.clearRect(0,0,240,240);
   const r=PLAYER_TYPES[c.dataset.pad].r;x.save();x.translate(120,120);x.scale(2.4,2.4);drawPaddle(x,{x:0,y:0,r},COLORS.player);x.restore()})}
 document.addEventListener('click',e=>{
-  const b=e.target.closest('[data-act],[data-level],[data-pad],[data-lang],[data-sound],[data-size]');if(!b)return;Snd.init();Snd.ui();
+  const b=e.target.closest('[data-act],[data-level],[data-pad],[data-lang],[data-sound],[data-size],[data-orient]');if(!b)return;Snd.init();Snd.ui();
   const a=b.dataset.act;
   if(b.dataset.level){pendingLevel=b.dataset.level;syncSettingsUI();$('#setup').classList.add('show');return}
   if(b.dataset.pad){settings.paddle=b.dataset.pad;store.set('paddle',settings.paddle);syncSettingsUI();return}
   if(b.dataset.lang){settings.lang=b.dataset.lang;store.set('lang',settings.lang);applyLang();return}
   if(b.dataset.sound){settings.sound=b.dataset.sound==='1';store.set('sound',settings.sound);Snd.setOn(settings.sound);syncSettingsUI();return}
+  if(b.dataset.orient){settings.orient=b.dataset.orient;store.set('orient',settings.orient);layout();buildArena();syncSettingsUI();return}
   if(b.dataset.size){settings.setup.cpuSize=b.dataset.size;store.set('setup',settings.setup);syncSettingsUI();return}
   switch(a){
     case'single':showScreen('difficulty');break;
