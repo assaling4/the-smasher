@@ -1037,10 +1037,17 @@ const G={state:'idle',time:0,stateT:0,player:mkPaddle(false),cpu:mkPaddle(true),
   ps:0,cs:0,sets:[0,0],setNo:1,results:[],timeLeft:0,cfg:null,level:null,banner:null,trail:[],parts:[],rings:[],shake:0,flash:0,demo:false,
   mode:'cpu',opp:null,fxq:[],remote:null};
 function mkPaddle(top){return{x:W/2,y:top?70:H-70,r:27.2,vx:0,vy:0,max:2600,top,ptx:W/2,pty:top?70:H-70,tx:W/2,ty:top?70:H-70,think:0,aim:null,stuckT:0}}
-const pointer={x:W/2,y:H-80};
+const pointer={x:W/2,y:H-80,moves:0};
 function clampPad(p,o){o.x=clamp(o.x,p.r,W-p.r);o.y=p.top?clamp(o.y,p.r,CENTER-p.r):clamp(o.y,CENTER+p.r,H-p.r);return o}
-function homePaddles(){const pl=G.player,cp=G.cpu;pl.x=pl.ptx=W/2;pl.y=pl.pty=H-75;cp.x=cp.tx=W/2;cp.y=cp.ty=75;pl.vx=pl.vy=cp.vx=cp.vy=0;cp.aim=null;
-  const t=clampPad(pl,{x:pointer.x,y:pointer.y});pl.ptx=t.x;pl.pty=t.y}
+// both paddles go back to their start spots; yours stays there until you move the mouse / finger again
+function homePaddles(){const pl=G.player,cp=G.cpu;pl.x=pl.ptx=W/2;pl.y=pl.pty=H-75;cp.x=cp.tx=W/2;cp.y=cp.ty=75;pl.vx=pl.vy=cp.vx=cp.vy=0;cp.aim=null;lockPlayer()}
+function lockPlayer(){G.lockPl=true;G.lockMoves=pointer.moves}
+// during a goal pause / set intro, slide the paddles back home so everyone sees the reset
+function glideHome(dt,both){const k=Math.min(1,dt*7),pl=G.player,cp=G.cpu;
+  pl.x+=(W/2-pl.x)*k;pl.y+=(H-75-pl.y)*k;pl.ptx=pl.x;pl.pty=pl.y;pl.vx=pl.vy=0;
+  if(both){cp.x+=(W/2-cp.x)*k;cp.y+=(75-cp.y)*k;cp.vx=cp.vy=0}lockPlayer()}
+function playerTarget(pl){if(G.lockPl&&pointer.moves!==G.lockMoves)G.lockPl=false;
+  return G.lockPl?{x:pl.x,y:pl.y}:clampPad(pl,{x:pointer.x,y:pointer.y})}
 function placePuck(x,y){const p=G.puck;p.x=x;p.y=y;p.vx=p.vy=0;p.last=null;G.trail.length=0}
 
 function movePaddle(p,tx,ty,h){
@@ -1207,6 +1214,7 @@ function update(dt){
   if(G.mode==='guest'){guestUpdate(dt);return}
   if(G.state==='wait')return;
   G.stateT+=dt;
+  if(G.state==='intro'||G.state==='goal'||G.state==='setEnd')glideHome(dt,G.mode==='cpu');
   if(G.state==='intro'){if(G.stateT>=1.7){G.state='play';G.stateT=0;setBanner(t('go'),null,.6,{size:64,fill:'#fff'});Snd.beep(true)}return}
   if(G.state==='goal'){if(G.stateT>=2){
       if(G.ps>=G.cfg.target||G.cs>=G.cfg.target)endSet('score');
@@ -1219,7 +1227,7 @@ function update(dt){
   if(!host){cp.think-=dt;if(cp.think<=0){cp.think=L.react;aiThink(cp,pl,L,false)}}
   let to;
   if(G.demo){pl.think-=dt;if(pl.think<=0){pl.think=LEVELS.normal.react;aiThink(pl,cp,LEVELS.normal,true)}to=clampPad(pl,{x:pl.tx,y:pl.ty})}
-  else to=clampPad(pl,{x:pointer.x,y:pointer.y});
+  else to=playerTarget(pl);
   const n=Math.max(1,Math.ceil(dt/(1/480))),h=dt/n,fx=pl.ptx,fy=pl.pty;
   for(let i=0;i<n;i++){
     const f=(i+1)/n;
@@ -1241,7 +1249,8 @@ function update(dt){
 function guestUpdate(dt){
   const pl=G.player,cp=G.cpu,pk=G.puck;
   if(G.state==='wait')return;
-  const to=clampPad(pl,{x:pointer.x,y:pointer.y});
+  if(G.state!=='play'){glideHome(dt,false)}
+  const to=G.state==='play'?playerTarget(pl):{x:pl.x,y:pl.y};
   const n=Math.max(1,Math.ceil(dt/(1/480))),h=dt/n,fx=pl.ptx,fy=pl.pty;
   for(let i=0;i<n;i++){const f=(i+1)/n;movePaddle(pl,lerp(fx,to.x,f),lerp(fy,to.y,f),h)}
   pl.ptx=to.x;pl.pty=to.y;
@@ -1307,7 +1316,7 @@ window.addEventListener('keydown',e=>{
   else if($('#setup').classList.contains('show'))$('#setup').classList.remove('show');
   else if(['difficulty','customize','settings','friends','pwf'].includes(curScreen)){showScreen('menu');Snd.play('calm')}
 });
-const onPointer=e=>{if(!LY.s)return;const u=(e.clientX-LY.ox)/LY.s,v=(e.clientY-LY.oy)/LY.s;
+const onPointer=e=>{pointer.moves++;if(!LY.s)return;const u=(e.clientX-LY.ox)/LY.s,v=(e.clientY-LY.oy)/LY.s;
   if(LY.rot){pointer.x=v;pointer.y=H-u}else{pointer.x=u;pointer.y=v-(e.pointerType==='touch'?TOUCH_OFF:0)}};
 window.addEventListener('onpointerrawupdate' in window?'pointerrawupdate':'pointermove',onPointer,{passive:true});if('onpointerrawupdate' in window)window.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')onPointer(e)},{passive:true});window.addEventListener('pointerdown',onPointer,{passive:true});
 window.addEventListener('contextmenu',e=>{if(G.state!=='idle')e.preventDefault()});
