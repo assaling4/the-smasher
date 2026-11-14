@@ -1272,7 +1272,7 @@ document.addEventListener('click',e=>{
     case'single':showScreen('difficulty');break;
     case'customize':showScreen('customize');drawPreviews();break;
     case'settings':showScreen('settings');break;
-    case'back':showScreen('menu');Snd.play('calm');break;
+    case'back':try{Snd.ctx&&Snd.ctx.state==='suspended'&&!document.hidden&&Snd.ctx.resume()}catch(e){}showScreen('menu');Snd.play('calm');break;
     case'cancelSetup':$('#setup').classList.remove('show');break;
     case'start':startMatch(pendingLevel,settings.setup);break;
     case'resume':resume();break;
@@ -2004,7 +2004,7 @@ window.onAct=(a,b)=>{
   switch(a){
     case'goout':openM('outModal');break;
     case'outNo':closeM('outModal');break;
-    case'outYes':closeM('outModal');Lobby.leave();showScreen('goodbye');Snd.play(null);break;
+    case'outYes':closeM('outModal');Lobby.leave();showScreen('goodbye');Snd.play(null);setTimeout(()=>{try{curScreen==='goodbye'&&Snd.ctx&&Snd.ctx.suspend()}catch(e){}},400);break;
     case'login':doLogin();break;
     case'continue':if(Acct.saved){Acct.me=Acct.saved;enterGame()}break;
     case'signup':$('#suErr').textContent='';$('#suId').value=$('#inId').value.trim();$('#suPw').value=$('#suPw2').value='';openM('signupModal');setTimeout(()=>$('#suId').focus(),50);break;
