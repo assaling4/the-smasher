@@ -1298,6 +1298,9 @@ const onPointer=e=>{if(!LY.s)return;const u=(e.clientX-LY.ox)/LY.s,v=(e.clientY-
 window.addEventListener('onpointerrawupdate' in window?'pointerrawupdate':'pointermove',onPointer,{passive:true});if('onpointerrawupdate' in window)window.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')onPointer(e)},{passive:true});window.addEventListener('pointerdown',onPointer,{passive:true});
 window.addEventListener('contextmenu',e=>{if(G.state!=='idle')e.preventDefault()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&G.mode==='cpu')pause()});
+// go quiet when the tab is hidden or the window is minimized; come back when it is shown again
+document.addEventListener('visibilitychange',()=>{const c=Snd.ctx;if(!c)return;try{document.hidden?c.suspend():c.resume()}catch(e){}});
+window.addEventListener('pagehide',()=>{try{Snd.ctx&&Snd.ctx.suspend()}catch(e){}});
 window.addEventListener('blur',()=>{if(G.mode==='cpu')pause()});
 window.addEventListener('resize',()=>{layout();buildArena();buildBg()});
 
