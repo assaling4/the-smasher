@@ -286,6 +286,7 @@ body.ko #connecting .msg{font-family:'Black Han Sans',sans-serif}
 <canvas id="bg"></canvas>
 <canvas id="game"></canvas>
 <button id="pauseBtn" aria-label="Pause"></button>
+<div id="netInfo" style="display:none;position:fixed;left:10px;bottom:8px;z-index:5;font:700 12px system-ui,sans-serif;letter-spacing:.04em;text-shadow:0 1px 3px #000;pointer-events:none"></div>
 
 <!-- MAIN MENU -->
 <section id="menu" class="screen">
@@ -620,9 +621,10 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t, rand=(a,b)=>a+Math.
 
 /* ---------- table constants (logical units) ---------- */
 const MOBILE=matchMedia('(pointer: coarse)').matches;
+const HOME_Y=50; // start spot distance from your own end (inside the coloured goal crease)
 const W=420, H=735, CENTER=H/2, GOAL_W=143, PUCK_R=12.75, RAIL=20; // v2: table +5%, goal +5%, pieces -15%
 const GL=W/2-GOAL_W/2, GR=W/2+GOAL_W/2;
-const FORWARD_PULL=.4; // 0 = pure bounce angle, 1 = always straight at the goal
+const FORWARD_PULL=.2; // 0 = pure bounce angle, 1 = always straight at the goal
 const PUCK_MAX=1500, FRICTION=0.16, WALL_E=0.9, TOUCH_OFF=48;
 const PLAYER_TYPES={normal:{r:27.2,speed:5200},small:{r:21.25,speed:6800},big:{r:35.7,speed:3800}};
 const CPU_SIZES={small:{r:21.25,mult:1.15},medium:{r:27.2,mult:1},big:{r:35.7,mult:.82}};
@@ -1135,12 +1137,12 @@ function mkPaddle(top){return{x:W/2,y:top?70:H-70,r:27.2,vx:0,vy:0,max:2600,top,
 const pointer={x:W/2,y:H-80,moves:0};
 function clampPad(p,o){o.x=clamp(o.x,p.r,W-p.r);o.y=p.top?clamp(o.y,p.r,CENTER-p.r):clamp(o.y,CENTER+p.r,H-p.r);return o}
 // both paddles go back to their start spots; yours stays there until you move the mouse / finger again
-function homePaddles(){const pl=G.player,cp=G.cpu;pl.x=pl.ptx=W/2;pl.y=pl.pty=H-75;cp.x=cp.tx=W/2;cp.y=cp.ty=75;pl.vx=pl.vy=cp.vx=cp.vy=0;cp.aim=null;lockPlayer()}
+function homePaddles(){const pl=G.player,cp=G.cpu;pl.x=pl.ptx=W/2;pl.y=pl.pty=H-HOME_Y;cp.x=cp.tx=W/2;cp.y=cp.ty=HOME_Y;pl.vx=pl.vy=cp.vx=cp.vy=0;cp.aim=null;lockPlayer()}
 function lockPlayer(){G.lockPl=true;G.lockMoves=pointer.moves}
 // during a goal pause / set intro, slide the paddles back home so everyone sees the reset
 function glideHome(dt,both){const k=Math.min(1,dt*7),pl=G.player,cp=G.cpu;
-  pl.x+=(W/2-pl.x)*k;pl.y+=(H-75-pl.y)*k;pl.ptx=pl.x;pl.pty=pl.y;pl.vx=pl.vy=0;
-  if(both){cp.x+=(W/2-cp.x)*k;cp.y+=(75-cp.y)*k;cp.vx=cp.vy=0}lockPlayer()}
+  pl.x+=(W/2-pl.x)*k;pl.y+=(H-HOME_Y-pl.y)*k;pl.ptx=pl.x;pl.pty=pl.y;pl.vx=pl.vy=0;
+  if(both){cp.x+=(W/2-cp.x)*k;cp.y+=(HOME_Y-cp.y)*k;cp.vx=cp.vy=0}lockPlayer()}
 function playerTarget(pl){if(G.lockPl&&pointer.moves!==G.lockMoves)G.lockPl=false;
   return G.lockPl?{x:pl.x,y:pl.y}:clampPad(pl,{x:pointer.x,y:pointer.y})}
 function placePuck(x,y){const p=G.puck;p.x=x;p.y=y;p.vx=p.vy=0;p.last=null;G.trail.length=0}
@@ -1232,6 +1234,18 @@ function aiThink(me,opp,L,flip){
     else ix=W/2+(px-W/2)*.6;
     tx=W/2+(ix-W/2)*L.track+err();ty=L.home+(onMine?0:Math.min(40,(CENTER-py)*-.05));
   }
+  // unstick: the puck has been sitting slow on my side (corner, wall, next to the goal) -> back off, then strike it
+  {const now=G.time,dtt=Math.min(.5,now-(me.lastT==null?now:me.lastT));me.lastT=now;
+    me.stuckT=onMine&&sp<220?(me.stuckT||0)+dtt:0;
+    if(me.stuckT>.8){
+      let dx,dy;
+      if(py<rs+14){dx=px>=W/2?1:-1;dy=-.6}            // pinned on my end wall: knock it sideways, away from my goal
+      else{dx=W/2-px;dy=H-py}                        // otherwise: knock it toward the other goal
+      const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
+      const ph=(me.stuckT-.8)%1.1;
+      if(ph<.35){tx=px-dx*(rs+34);ty=py-dy*(rs+34)}  // line up behind it
+      else{tx=px+dx*40;ty=py+dy*40}                  // drive through it
+      me.aim=null}}
   me.tx=tx;me.ty=F(ty);
 }
 
@@ -1352,7 +1366,14 @@ function guestUpdate(dt){
   pl.ptx=to.x;pl.pty=to.y;
   // opponent paddle + puck: carry on from the last snapshot
   cp.x+=cp.vx*dt;cp.y+=cp.vy*dt;const o=clampPad(cp,{x:cp.x,y:cp.y});cp.x=o.x;cp.y=o.y;
-  if(G.state==='play'){pk.x+=pk.vx*dt;pk.y+=pk.vy*dt;if(pk.y>-PUCK_R&&pk.y<H+PUCK_R)wallBounce(false)}
+  if(G.state==='play'){
+    // predict: move the puck and let it bounce off walls and MY paddle right away (the host confirms a moment later)
+    const n2=Math.max(1,Math.ceil(dt/(1/480))),h2=dt/n2;
+    for(let i=0;i<n2;i++){pk.x+=pk.vx*h2;pk.y+=pk.vy*h2;
+      if(pk.y>-PUCK_R&&pk.y<H+PUCK_R){wallBounce(false);const bx=pk.vx,by=pk.vy;collide(pl,'player');separate(pl);
+        if(pk.vx!==bx||pk.vy!==by)G.localHit=performance.now()}}
+    // small corrections from the host are blended in instead of snapping
+    if(G.corr){const k=Math.min(1,dt*12);pk.x+=G.corr.x*k;pk.y+=G.corr.y*k;G.corr.x*=1-k;G.corr.y*=1-k}}
   if(G.state==='play')G.timeLeft=Math.max(0,G.timeLeft-dt);
   Snd.intense=G.state==='play'&&G.timeLeft<=10;
   const sp=Math.hypot(pk.vx,pk.vy);G.trailT=(G.trailT||0)+dt;if(G.trailT>=1/60){G.trailT=0;G.trail.push({x:pk.x,y:pk.y,k:clamp((sp-250)/900,0,1)});if(G.trail.length>12)G.trail.shift()}
@@ -1491,7 +1512,7 @@ Object.assign(T.en,{goOut:'Go out',goOutQ:'Go out?',yes:'Yes',no:'No',escNo:'Esc
   serverFull:'Server full',serverFullB:'{n} players are online, which is the limit right now. Try again soon. Single Player still works.',
   retry:'Try again',playOffline:'Play offline',ok:'OK',kicked:'Logged in somewhere else',kickedB:'Your account was just logged in on another device, so this one was logged out.',
   loggedOut:'Logged out',invTitle:'{n} invites you!',invWait:'Waiting for {n}',invDeclined:'{n} said no.',invBusy:'{n} is busy right now.',
-  invTimeout:'{n} did not answer.',invCancelled:'{n} cancelled the invite.',connectingTo:'Connecting to {n}',connFail:'Could not connect to {n}.',
+  invTimeout:'{n} did not answer.',invCancelled:'{n} cancelled the invite.',connectingTo:'Connecting to {n}',connFail:'Could not connect to {n}.',netDirect:'Direct',netRelay:'Relay',
   oppLeft:'{n} left the match',oppLost:'{n} lost connection',youLost:'Your connection was lost',connProblem:'Connection problem',
   waitingOpp:'Waiting for {n}... {s}',rematchWait:'Waiting...',rematchAsk:'{n} wants a rematch!',friendReq:'{n} sent you a friend request',
   friendNow:'{n} is now your friend!',reconnected:'Reconnected!',copied:'Copied!',time:'Time',score:'Score',setsShort:'Sets',nickHint:'Guests can change their nickname any time.',
@@ -1521,7 +1542,7 @@ Object.assign(T.ko,{goOut:'나가기',goOutQ:'나갈까요?',yes:'예',no:'아�
   serverFull:'서버가 꽉 찼어요',serverFullB:'지금 {n}명이 접속해 있어서 더 들어갈 수 없어요. 잠시 뒤에 다시 해 보세요. 싱글 플레이는 할 수 있어요.',
   retry:'다시 시도',playOffline:'오프라인으로 하기',ok:'확인',kicked:'다른 곳에서 로그인됨',kickedB:'다른 기기에서 내 계정으로 로그인해서 이 기기는 로그아웃되었어요.',
   loggedOut:'로그아웃됨',invTitle:'{n}님의 초대!',invWait:'{n}님을 기다리는 중',invDeclined:'{n}님이 거절했어요.',invBusy:'{n}님은 지금 바빠요.',
-  invTimeout:'{n}님이 대답하지 않았어요.',invCancelled:'{n}님이 초대를 취소했어요.',connectingTo:'{n}님과 연결 중',connFail:'{n}님과 연결하지 못했어요.',
+  invTimeout:'{n}님이 대답하지 않았어요.',invCancelled:'{n}님이 초대를 취소했어요.',connectingTo:'{n}님과 연결 중',connFail:'{n}님과 연결하지 못했어요.',netDirect:'직접 연결',netRelay:'서버 경유',
   oppLeft:'{n}님이 나갔어요',oppLost:'{n}님의 연결이 끊겼어요',youLost:'내 연결이 끊겼어요',connProblem:'연결 문제',
   waitingOpp:'{n}님을 기다리는 중... {s}',rematchWait:'기다리는 중...',rematchAsk:'{n}님이 재대결을 원해요!',friendReq:'{n}님이 친구 요청을 보냈어요',
   friendNow:'{n}님과 친구가 되었어요!',reconnected:'다시 연결됐어요!',copied:'복사했어요!',time:'시간',score:'점수',setsShort:'세트',nickHint:'게스트는 언제든 닉네임을 바꿀 수 있어요.',
@@ -2006,17 +2027,30 @@ const Online={room:null,pending:null,incoming:null,
   },
   onFast(d){
     const R=this.room;if(!R||!Array.isArray(d))return;
+    if(d[0]==='k'){this.sendFast(['K',d[1]]);return}
+    if(d[0]==='K'){const r=performance.now()-d[1];if(r>=0&&r<5000)R.rtt=R.rtt?R.rtt*.7+r*.3:r;return}
     if(G.state==='wait')this.endWait();
     if(d[0]==='p'&&G.mode==='host'){G.remote={x:W-d[1],y:H-d[2],vx:-d[3],vy:-d[4],t:performance.now()};return}
     if(d[0]==='s'&&G.mode==='guest'){
       if(d[1]<=R.lastSeq&&R.lastSeq-d[1]<1000)return;R.lastSeq=d[1];
-      const pk=G.puck;pk.x=W-d[2];pk.y=H-d[3];pk.vx=-d[4];pk.vy=-d[5];pk.last=d[6]===1?'cpu':d[6]===2?'player':null;
-      const cp=G.cpu;cp.x=W-d[7];cp.y=H-d[8];cp.vx=-d[9];cp.vy=-d[10];
+      const pk=G.puck,now=performance.now(),lead=Math.min(.1,(R.rtt||60)/2000);
+      const hold=G.localHit&&now-G.localHit<clamp((R.rtt||60)+60,90,320)&&!(d[6]===2&&-d[5]<0);
+      if(!hold){
+        const lx=pk.x,ly=pk.y;
+        pk.x=W-d[2];pk.y=H-d[3];pk.vx=-d[4];pk.vy=-d[5];pk.last=d[6]===1?'cpu':d[6]===2?'player':null;
+        // the snapshot is half a ping old: move it forward to "now"
+        if(ST[d[14]]==='play'){const m=Math.ceil(lead/(1/240));for(let i=0;i<m;i++){pk.x+=pk.vx*lead/m;pk.y+=pk.vy*lead/m;if(pk.y>-PUCK_R&&pk.y<H+PUCK_R)wallBounce(false)}}
+        const ex=pk.x-lx,ey=pk.y-ly;
+        if(G.state==='play'&&Math.hypot(ex,ey)<45){pk.x=lx;pk.y=ly;G.corr={x:ex,y:ey}}else G.corr=null;
+      }
+      const cp=G.cpu,ox=W-d[7]+(-d[9])*lead,oy=H-d[8]+(-d[10])*lead;
+      if(Math.hypot(ox-cp.x,oy-cp.y)<60){cp.x+=(ox-cp.x)*.5;cp.y+=(oy-cp.y)*.5}else{cp.x=ox;cp.y=oy}
+      {const o=clampPad(cp,{x:cp.x,y:cp.y});cp.x=o.x;cp.y=o.y}cp.vx=-d[9];cp.vy=-d[10];
       G.ps=d[12];G.cs=d[11];G.timeLeft=d[13]/10;
       const ns=ST[d[14]]||'play';
       if(G.state!=='over'&&ns!=='wait'){if(G.state==='intro'&&ns==='play'){setBanner(t('go'),null,.6,{size:64,fill:'#fff'});Snd.beep(true)}G.state=ns}
       for(let i=15;i<d.length;i++){const f=d[i];
-        if(f[0]==='h')hitFx(f[1]?'cpu':'player',W-f[2],H-f[3],f[4]);
+        if(f[0]==='h'){if(f[1]||!G.localHit||now-G.localHit>400)hitFx(f[1]?'cpu':'player',W-f[2],H-f[3],f[4])}
         else if(f[0]==='w'){Snd.wall(f[1]);if(f[1]>500)spark(W-f[2],H-f[3],4,'rgba(255,255,255,')}}
     }
   },
@@ -2043,10 +2077,14 @@ const Online={room:null,pending:null,incoming:null,
   },
   /* ---- every frame ---- */
   frame(dt){
-    const R=this.room;if(!R)return;const now=performance.now();
+    const R=this.room;if(!R){const e=document.getElementById('netInfo');if(e&&e.style.display!=='none')e.style.display='none';return}const now=performance.now();
     const live=G.mode!=='cpu'&&['intro','play','goal','setEnd','wait'].includes(G.state);
     if(live&&G.state!=='wait'){
-      const iv=R.p2p?1/60:1/20;R.sendT+=dt;
+      const iv=R.p2p?1/60:1/30;R.sendT+=dt;
+      R.pingT=(R.pingT||0)+dt;if(R.pingT>=1){R.pingT=0;this.sendFast(['k',now])}
+      R.infoT=(R.infoT||0)+dt;if(R.infoT>=.5){R.infoT=0;const e=document.getElementById('netInfo');
+        if(e){const ms=R.rtt?Math.round(R.rtt):null;e.textContent=(R.p2p?t('netDirect'):t('netRelay'))+(ms!=null?' · '+ms+' ms':'');
+          e.style.color=ms==null?'#9fc7ff':ms<80?'#7dffb0':ms<160?'#ffd36b':'#ff7d8f';e.style.display='block'}}
       if(R.sendT>=iv){R.sendT=0;
         if(G.mode==='host'){const pk=G.puck,cp=G.player,r1=v=>Math.round(v*10)/10;
           const d=['s',++R.seq,r1(pk.x),r1(pk.y),Math.round(pk.vx),Math.round(pk.vy),pk.last==='player'?1:pk.last==='cpu'?2:0,
@@ -2056,6 +2094,7 @@ const Online={room:null,pending:null,incoming:null,
       }
       if(now-R.lastRecv>2500)this.startWait();
     }
+    if(!live){const e=document.getElementById('netInfo');if(e)e.style.display='none'}
     if(G.state==='wait'){
       const left=Math.max(0,Math.ceil(10-(now-R.waitT)/1000));
       const nb=$('#netBox');nb.textContent=t('waitingOpp',{n:R.peer.name,s:left});nb.classList.add('show');
