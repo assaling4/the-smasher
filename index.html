@@ -1314,6 +1314,7 @@ function resume(){if(G.state!=='paused')return;G.state=G.prev;document.body.clas
 
 function update(dt){
   G.time+=dt;
+  if(PL.on&&!wantLock())dropMouse(); // a box popped up: give the cursor back
   // effects always animate (also behind pause/end)
   for(const p of G.parts){p.x+=p.vx*dt;p.y+=p.vy*dt;const fr=Math.pow(.94,dt*60);p.vx*=fr;p.vy*=fr;p.life-=dt}
   G.parts=G.parts.filter(p=>p.life>0);
@@ -1441,7 +1442,7 @@ window.addEventListener('keydown',e=>{
   else if(['difficulty','customize','settings','friends','pwf'].includes(curScreen)){showScreen('menu');Snd.play('calm')}
 });
 const PL={on:false,lostT:0};
-function wantLock(){return !MOBILE&&document.body.classList.contains('playing')&&['intro','play','goal','setEnd','wait'].includes(G.state)}
+function wantLock(){return !MOBILE&&document.body.classList.contains('playing')&&['intro','play','goal','setEnd','wait'].includes(G.state)&&!document.querySelector('.modal.show')}
 function grabMouse(){if(!wantLock()||document.pointerLockElement)return;
   try{const r=gc.requestPointerLock({unadjustedMovement:true});if(r&&r.catch)r.catch(()=>{try{const r2=gc.requestPointerLock();if(r2&&r2.catch)r2.catch(()=>{})}catch(e){}})}catch(e){}}
 function dropMouse(){if(document.pointerLockElement)try{document.exitPointerLock()}catch(e){}}
