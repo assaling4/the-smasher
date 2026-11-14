@@ -155,6 +155,7 @@ body.ko #end .big{font-family:'Black Han Sans',sans-serif}
   background:radial-gradient(circle at 35% 30%,rgba(90,170,255,.9),rgba(10,40,100,.9));border:2px solid rgba(200,235,255,.8);box-shadow:0 4px 12px rgba(0,0,0,.5)}
 #pauseBtn.show{display:flex}
 #pauseBtn::before,#pauseBtn::after{content:"";width:5px;height:18px;border-radius:2px;background:#fff;margin:0 3px}
+#settings .panel{padding:20px 24px 18px}#settings .lbl{margin:11px 0 6px}#settings .seg .btn{padding:7px 10px}#settings .actions{margin-top:14px}#settings .h{font-size:clamp(26px,4vw,38px)}
 #goodbye p{font-size:20px;color:#d6efff;text-align:center;font-weight:600}
 .hint{font-size:14px;color:#a9dcff;text-align:center;opacity:.85}
 
@@ -556,8 +557,13 @@ body.ko #connecting .msg{font-family:'Black Han Sans',sans-serif}
     <div class="h" data-i="settings">Settings</div>
     <div class="lbl"><span data-i="language">Language</span></div>
     <div class="seg"><button class="btn" data-lang="en"><span>English</span></button><button class="btn" data-lang="ko"><span>한국어</span></button></div>
-    <div class="lbl"><span data-i="sound">Sound</span></div>
-    <div class="seg"><button class="btn" data-sound="1"><span data-i="on">On</span></button><button class="btn" data-sound="0"><span data-i="off">Off</span></button></div>
+    <div class="lbl"><span data-i="music">Music</span><b id="vMusic"></b></div>
+    <div class="seg"><button class="btn" data-tog="music" data-v="1"><span data-i="on">On</span></button><button class="btn" data-tog="music" data-v="0"><span data-i="off">Off</span></button></div>
+    <input type="range" id="rMusic" min="0" max="100" step="5" style="margin-top:6px">
+    <div class="lbl"><span data-i="sfx">Sound effects</span></div>
+    <div class="seg"><button class="btn" data-tog="sfx" data-v="1"><span data-i="on">On</span></button><button class="btn" data-tog="sfx" data-v="0"><span data-i="off">Off</span></button></div>
+    <div class="lbl"><span data-i="vfx">Visual effects</span></div>
+    <div class="seg"><button class="btn" data-tog="vfx" data-v="1"><span data-i="on">On</span></button><button class="btn" data-tog="vfx" data-v="0"><span data-i="off">Off</span></button></div>
     <div class="lbl"><span data-i="orientation">Screen</span></div>
     <div class="seg"><button class="btn" data-orient="auto"><span data-i="oAuto">Auto</span></button><button class="btn" data-orient="landscape"><span data-i="oLand">Landscape</span></button><button class="btn" data-orient="portrait"><span data-i="oPort">Portrait</span></button></div>
     <div class="lbl"><span data-i="fps">Frame rate</span><b id="vFps"></b></div>
@@ -624,7 +630,11 @@ const store={get(k,d){try{const v=localStorage.getItem('smasher.'+k);return v==n
              set(k,v){try{localStorage.setItem('smasher.'+k,JSON.stringify(v))}catch(e){}}};
 const settings={
   lang:store.get('lang',(navigator.language||'en').toLowerCase().startsWith('ko')?'ko':'en'),
-  sound:store.get('sound',true),
+  sound:true,
+  music:store.get('music',store.get('sound',true)),
+  sfx:store.get('sfx',store.get('sound',true)),
+  vfx:store.get('vfx',true),
+  musicVol:store.get('musicVol',70),
   orient:store.get('orient','auto'),
   fps:store.get('fps',0), // 0 = as fast as the screen allows
   paddle:store.get('paddle','normal'),
@@ -640,7 +650,7 @@ const T={
   cpuPaddle:'Computer paddle',small:'Small',medium:'Medium',big:'Big',random:'Random',start:'Start',
   yourPaddle:'Your paddle',pNormal:'Normal',pSmall:'Small',pBig:'Big',
   pNormalD:'Balanced size and speed.',pSmallD:'Tiny but lightning fast.',pBigD:'A huge wall, but heavy.',
-  size:'Size',speed:'Speed',language:'Language',sound:'Sound',on:'On',off:'Off',orientation:'Screen',oAuto:'Auto',oLand:'Landscape',oPort:'Portrait',fps:'Frame rate',fpsMax:'Max',fpsNow:'now {n} fps',
+  size:'Size',speed:'Speed',language:'Language',sound:'Sound',music:'Music',sfx:'Sound effects',vfx:'Visual effects',on:'On',off:'Off',orientation:'Screen',oAuto:'Auto',oLand:'Landscape',oPort:'Portrait',fps:'Frame rate',fpsMax:'Max',fpsNow:'now {n} fps',
   paused:'Paused',resume:'Resume',quitMenu:'Quit to menu',escHint:'Press Esc to resume',
   goal:'GOAL!',cpuGoal:'CPU SCORES',youWin:'YOU WIN!',youLose:'YOU LOSE',draw:'DRAW',rematch:'Rematch',menu:'Menu',
   set:'SET',setOf:'SET {n} / {m}',you:'YOU',cpu:'CPU',timeUp:"TIME'S UP",ready:'READY',go:'GO!',
@@ -655,7 +665,7 @@ const T={
   cpuPaddle:'컴퓨터 패들 크기',small:'작게',medium:'중간',big:'크게',random:'무작위',start:'시작',
   yourPaddle:'내 패들',pNormal:'기본',pSmall:'작은 패들',pBig:'큰 패들',
   pNormalD:'크기와 속도의 균형.',pSmallD:'작지만 번개처럼 빨라요.',pBigD:'거대한 벽, 하지만 무거워요.',
-  size:'크기',speed:'속도',language:'언어',sound:'소리',on:'켜기',off:'끄기',orientation:'화면 방향',oAuto:'자동',oLand:'가로',oPort:'세로',fps:'프레임',fpsMax:'최대',fpsNow:'현재 {n} fps',
+  size:'크기',speed:'속도',language:'언어',sound:'소리',music:'음악',sfx:'효과음',vfx:'화면 효과',on:'켜기',off:'끄기',orientation:'화면 방향',oAuto:'자동',oLand:'가로',oPort:'세로',fps:'프레임',fpsMax:'최대',fpsNow:'현재 {n} fps',
   paused:'일시정지',resume:'계속하기',quitMenu:'메뉴로 나가기',escHint:'Esc를 누르면 계속합니다',
   goal:'골!',cpuGoal:'컴퓨터 득점',youWin:'승리!',youLose:'패배',draw:'무승부',rematch:'재대결',menu:'메뉴',
   set:'세트',setOf:'{n}세트 / {m}',you:'나',cpu:'컴퓨터',timeUp:'시간 종료',ready:'준비',go:'시작!',
@@ -686,9 +696,9 @@ const Snd={
     if(this.ctx){if(this.ctx.state==='suspended')this.ctx.resume();return}
     const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
     const c=this.ctx=new AC();
-    this.master=c.createGain();this.master.gain.value=settings.sound?.8:0;this.master.connect(c.destination);
+    this.master=c.createGain();this.master.gain.value=.8;this.master.connect(c.destination);
     const comp=c.createDynamicsCompressor();comp.threshold.value=-14;comp.ratio.value=4;comp.connect(this.master);
-    this.music=c.createGain();this.music.gain.value=.5;this.music.connect(comp);
+    this.music=c.createGain();this.ducked=false;this.music.gain.value=this.musicLevel();this.music.connect(comp);
     this.sfx=c.createGain();this.sfx.gain.value=.9;this.sfx.connect(comp);
     this.delay=c.createDelay(1);this.delay.delayTime.value=.36;
     const fb=c.createGain();fb.gain.value=.33;const dl=c.createBiquadFilter();dl.type='lowpass';dl.frequency.value=2600;
@@ -705,7 +715,9 @@ const Snd={
     if(this.want){const w=this.want;this.want=null;this.play(w)}
   },
   setOn(on){if(!this.ctx)return;const t=this.ctx.currentTime;this.master.gain.cancelScheduledValues(t);this.master.gain.setTargetAtTime(on?.8:0,t,.05)},
-  duck(on){if(!this.ctx)return;const t=this.ctx.currentTime;this.music.gain.setTargetAtTime(on?.16:.5,t,.15)},
+  musicLevel(){return settings.music?.7*settings.musicVol/100*(this.ducked?.32:1):0},
+  duck(on){this.ducked=on;this.applyMusic()},
+  applyMusic(){if(!this.ctx)return;const t=this.ctx.currentTime;this.music.gain.cancelScheduledValues(t);this.music.gain.setTargetAtTime(this.musicLevel(),t,.12)},
   play(name){
     if(!this.ctx){this.want=name;return}
     if(this.cur===name)return;this.cur=name;const t=this.ctx.currentTime;
@@ -742,7 +754,7 @@ const Snd={
     this.osc('square',mtof(ch[up[st]]+lift),t,.003,sd*.9,.028,dst);
     if(st===0)for(const m of ch)this.osc('sawtooth',mtof(m),t,.005,.28,.03,dst,barN%2?5:-5);
   },
-  sfxOn(){return this.ctx&&settings.sound},
+  sfxOn(){return this.ctx&&settings.sfx},
   hit(v){if(!this.sfxOn())return;const t=this.ctx.currentTime;if(t-this.lastHit<.045)return;this.lastHit=t;
     const k=clamp(v/PUCK_MAX,0,1);this.osc('triangle',240+k*520,t,.002,.08+k*.05,.22+.3*k,this.sfx,0,120);
     this.noise(t,.04,.12+.3*k,this.sfx,'highpass',2500)},
@@ -945,7 +957,7 @@ function drawPuck(x,pk,alpha){
   const r=PUCK_R,sp=Math.hypot(pk.vx,pk.vy),k=clamp(sp/PUCK_MAX,0,1),col=pk.last?COLORS[pk.last]:null;
   x.save();x.globalAlpha=alpha;
   // trail
-  for(let i=0;i<G.trail.length;i++){const tp=G.trail[i],a=(i+1)/G.trail.length;
+  if(settings.vfx)for(let i=0;i<G.trail.length;i++){const tp=G.trail[i],a=(i+1)/G.trail.length;
     x.fillStyle=col?col.glow+(a*.35*tp.k)+')':`rgba(120,180,240,${a*.25*tp.k})`;x.beginPath();x.arc(tp.x,tp.y,r*(.45+.55*a),0,7);x.fill()}
   x.fillStyle='rgba(10,30,70,.35)';x.beginPath();x.ellipse(pk.x+3,pk.y+5,r,r*.95,0,0,7);x.fill();
   if(col&&k>.15){const og=x.createRadialGradient(pk.x,pk.y,r*.6,pk.x,pk.y,r*2.2);og.addColorStop(0,col.glow+(.55*k)+')');og.addColorStop(1,col.glow+'0)');x.fillStyle=og;x.beginPath();x.arc(pk.x,pk.y,r*2.2,0,7);x.fill()}
@@ -995,12 +1007,12 @@ function drawHud(x){
 }
 function render(){
   const x=gx,{dpr,s,ox,oy}=LY;x.setTransform(1,0,0,1,0,0);x.drawImage(arenaImg,0,0);x.setTransform(dpr,0,0,dpr,0,0);
-  const sh=G.shake>0?G.shake:0,sx=(Math.random()*2-1)*sh,sy=(Math.random()*2-1)*sh;
+  const sh=G.shake>0&&settings.vfx?G.shake:0,sx=(Math.random()*2-1)*sh,sy=(Math.random()*2-1)*sh;
   x.save();x.translate(ox+sx,oy+sy);x.scale(s,s);
   if(LY.rot){x.translate(H,0);x.rotate(Math.PI/2)}
   x.drawImage(tableImg,-(RAIL+20),-(RAIL+20),tableImg.width/(dpr*s),tableImg.height/(dpr*s));
   // goal flash
-  if(G.flash>0){const f=G.flash,top=G.flashSide==='top';const col=top?'80,200,255':'255,70,100';
+  if(G.flash>0&&settings.vfx){const f=G.flash,top=G.flashSide==='top';const col=top?'80,200,255':'255,70,100';
     const g=x.createRadialGradient(W/2,top?0:H,0,W/2,top?0:H,H*.6);g.addColorStop(0,`rgba(${col},${.7*f})`);g.addColorStop(1,`rgba(${col},0)`);
     x.save();rr(x,0,0,W,H,14);x.clip();x.fillStyle=g;x.fillRect(0,0,W,H);x.restore()}
   // puck (fades when inside the goal)
@@ -1075,7 +1087,7 @@ function collide(pd,who){
 function hitFx(who,hx,hy,target){
   {
     Snd.hit(target);
-    if(target>350){spark(hx,hy,Math.round(4+target/150),COLORS[who].glow);G.rings.push({x:hx,y:hy,r:6,life:.35,max:.35,c:COLORS[who].glow})}
+    if(target>350){spark(hx,hy,Math.round(4+target/150),COLORS[who].glow);if(settings.vfx)G.rings.push({x:hx,y:hy,r:6,life:.35,max:.35,c:COLORS[who].glow})}
     if(target>1200)G.shake=Math.max(G.shake,3);
   }
 }
@@ -1083,8 +1095,8 @@ function separate(pd){ // if the puck is pinned against a wall, push the paddle 
   const p=G.puck,dx=p.x-pd.x,dy=p.y-pd.y,d=Math.hypot(dx,dy),min=pd.r+PUCK_R;
   if(d<min-.5&&d>.001){const nx=dx/d,ny=dy/d;const o=clampPad(pd,{x:p.x-nx*min,y:p.y-ny*min});pd.x=o.x;pd.y=o.y}
 }
-function spark(x,y,n,col){for(let i=0;i<n;i++){const a=Math.random()*7,s=rand(60,260);G.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.25,.55),max:.55,r:rand(1.2,2.8),c:col+'1)'})}}
-function burst(x,y,col){for(let i=0;i<70;i++){const a=Math.random()*7,s=rand(80,520);G.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.5,1.2),max:1.2,r:rand(1.5,4),c:Math.random()<.5?'rgba(255,255,255,1)':col+'1)'})}}
+function spark(x,y,n,col){if(!settings.vfx)return;for(let i=0;i<n;i++){const a=Math.random()*7,s=rand(60,260);G.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.25,.55),max:.55,r:rand(1.2,2.8),c:col+'1)'})}}
+function burst(x,y,col){if(!settings.vfx)return;for(let i=0;i<70;i++){const a=Math.random()*7,s=rand(80,520);G.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.5,1.2),max:1.2,r:rand(1.5,4),c:Math.random()<.5?'rgba(255,255,255,1)':col+'1)'})}}
 
 /* ---------- computer opponent ---------- */
 function fold(x){const a=PUCK_R,b=W-PUCK_R,L=b-a;let u=(x-a)%(2*L);if(u<0)u+=2*L;return a+(u<=L?u:2*L-u)}
@@ -1249,7 +1261,8 @@ function syncSettingsUI(){
   $$('[data-lang]').forEach(b=>b.classList.toggle('on',b.dataset.lang===settings.lang));
   $$('[data-fps]').forEach(b=>b.classList.toggle('on',+b.dataset.fps===settings.fps));
   $$('[data-orient]').forEach(b=>b.classList.toggle('on',b.dataset.orient===settings.orient));
-  $$('[data-sound]').forEach(b=>b.classList.toggle('on',(b.dataset.sound==='1')===!!settings.sound));
+  $$('[data-tog]').forEach(b=>b.classList.toggle('on',(b.dataset.v==='1')===!!settings[b.dataset.tog]));
+  {const e=$('#rMusic');e.value=settings.musicVol;e.style.setProperty('--p',settings.musicVol+'%');e.disabled=!settings.music;e.style.opacity=settings.music?1:.4;$('#vMusic').textContent=settings.music?settings.musicVol+'%':''}
   $$('#padCards .card').forEach(c=>c.classList.toggle('sel',c.dataset.pad===settings.paddle));
   $$('#cpuSeg .btn').forEach(b=>b.classList.toggle('on',b.dataset.size===settings.setup.cpuSize));
   const s=settings.setup;$('#rTime').value=s.time;$('#rTarget').value=s.target;$('#rSets').value=s.sets;
@@ -1259,12 +1272,12 @@ function syncSettingsUI(){
 function drawPreviews(){$$('#padCards .card').forEach(c=>{const cv=c.querySelector('canvas'),x=cv.getContext('2d');x.clearRect(0,0,240,240);
   const r=PLAYER_TYPES[c.dataset.pad].r;x.save();x.translate(120,120);x.scale(2.4,2.4);drawPaddle(x,{x:0,y:0,r},COLORS.player);x.restore()})}
 document.addEventListener('click',e=>{
-  const b=e.target.closest('[data-act],[data-level],[data-pad],[data-lang],[data-sound],[data-size],[data-orient],[data-fps]');if(!b||b.disabled)return;Snd.init();Snd.ui();
+  const b=e.target.closest('[data-act],[data-level],[data-pad],[data-lang],[data-tog],[data-size],[data-orient],[data-fps]');if(!b||b.disabled)return;Snd.init();Snd.ui();
   const a=b.dataset.act;
   if(b.dataset.level){pendingLevel=b.dataset.level;syncSettingsUI();$('#setup').classList.add('show');return}
   if(b.dataset.pad){settings.paddle=b.dataset.pad;store.set('paddle',settings.paddle);syncSettingsUI();return}
   if(b.dataset.lang){settings.lang=b.dataset.lang;store.set('lang',settings.lang);applyLang();return}
-  if(b.dataset.sound){settings.sound=b.dataset.sound==='1';store.set('sound',settings.sound);Snd.setOn(settings.sound);syncSettingsUI();return}
+  if(b.dataset.tog){const k=b.dataset.tog;settings[k]=b.dataset.v==='1';store.set(k,settings[k]);if(k==='music')Snd.applyMusic();syncSettingsUI();return}
   if(b.dataset.fps){settings.fps=+b.dataset.fps;store.set('fps',settings.fps);nextDraw=0;syncSettingsUI();return}
   if(b.dataset.orient){settings.orient=b.dataset.orient;store.set('orient',settings.orient);layout();buildArena();syncSettingsUI();return}
   if(b.dataset.size){settings.setup.cpuSize=b.dataset.size;store.set('setup',settings.setup);syncSettingsUI();return}
@@ -1282,6 +1295,7 @@ document.addEventListener('click',e=>{
     default:if(window.onAct)onAct(a,b,e);
   }
 });
+$('#rMusic').addEventListener('input',e=>{settings.musicVol=+e.target.value;store.set('musicVol',settings.musicVol);Snd.applyMusic();syncSettingsUI()});
 for(const [id,key] of [['rTime','time'],['rTarget','target'],['rSets','sets']])
   $('#'+id).addEventListener('input',e=>{settings.setup[key]=+e.target.value;store.set('setup',settings.setup);syncSettingsUI()});
 $('#pauseBtn').addEventListener('click',e=>{e.stopPropagation();pause()});
