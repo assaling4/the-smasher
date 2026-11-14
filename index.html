@@ -1137,12 +1137,12 @@ function mkPaddle(top){return{x:W/2,y:top?70:H-70,r:27.2,vx:0,vy:0,max:2600,top,
 const pointer={x:W/2,y:H-80,moves:0};
 function clampPad(p,o){o.x=clamp(o.x,p.r,W-p.r);o.y=p.top?clamp(o.y,p.r,CENTER-p.r):clamp(o.y,CENTER+p.r,H-p.r);return o}
 // both paddles go back to their start spots; yours stays there until you move the mouse / finger again
-function homePaddles(){const pl=G.player,cp=G.cpu;pl.x=pl.ptx=W/2;pl.y=pl.pty=H-HOME_Y;cp.x=cp.tx=W/2;cp.y=cp.ty=HOME_Y;pl.vx=pl.vy=cp.vx=cp.vy=0;cp.aim=null;lockPlayer()}
+function homePaddles(){const pl=G.player,cp=G.cpu;pl.x=pl.ptx=W/2;pl.y=pl.pty=H-HOME_Y;cp.x=cp.tx=W/2;cp.y=cp.ty=HOME_Y;pl.vx=pl.vy=cp.vx=cp.vy=0;cp.aim=null;lockPlayer();syncPointerToPaddle()}
 function lockPlayer(){G.lockPl=true;G.lockMoves=pointer.moves}
 // during a goal pause / set intro, slide the paddles back home so everyone sees the reset
 function glideHome(dt,both){const k=Math.min(1,dt*7),pl=G.player,cp=G.cpu;
   pl.x+=(W/2-pl.x)*k;pl.y+=(H-HOME_Y-pl.y)*k;pl.ptx=pl.x;pl.pty=pl.y;pl.vx=pl.vy=0;
-  if(both){cp.x+=(W/2-cp.x)*k;cp.y+=(HOME_Y-cp.y)*k;cp.vx=cp.vy=0}lockPlayer()}
+  if(both){cp.x+=(W/2-cp.x)*k;cp.y+=(HOME_Y-cp.y)*k;cp.vx=cp.vy=0}lockPlayer();syncPointerToPaddle()}
 function playerTarget(pl){if(G.lockPl&&pointer.moves!==G.lockMoves)G.lockPl=false;
   return G.lockPl?{x:pl.x,y:pl.y}:clampPad(pl,{x:pointer.x,y:pointer.y})}
 function placePuck(x,y){const p=G.puck;p.x=x;p.y=y;p.vx=p.vy=0;p.last=null;G.trail.length=0}
@@ -1260,6 +1260,7 @@ function startMatch(level,cfg,mode='cpu',opp=null){
   Snd.play('action');Snd.duck(false);
   G.hint=t(matchMedia('(pointer: coarse)').matches?(mode==='cpu'?'hintTouch':'hintTouchOn'):(mode==='cpu'?'hintMouse':'hintMouseOn'));
   if(mode!=='guest')startSet();else{homePaddles();placePuck(W/2,CENTER);G.state='intro';G.stateT=0}
+  grabMouse();
 }
 function startSet(){
   const c=G.cfg;
@@ -1295,7 +1296,7 @@ function afterSet(){
   const rem=G.cfg.sets-G.setNo,diff=Math.abs(G.sets[0]-G.sets[1]);
   if(G.setNo>=G.cfg.sets||diff>rem)endMatch();else{G.setNo++;startSet()}
 }
-function endMatch(forced,note){Snd.intense=false;
+function endMatch(forced,note){Snd.intense=false;dropMouse();
   if(G.mode==='host'&&window.Online&&!forced)Online.hostEvent({t:'end'});
   G.state='over';document.body.classList.remove('playing');$('#pauseBtn').classList.remove('show');
   const r=forced||(G.sets[0]>G.sets[1]?'win':G.sets[1]>G.sets[0]?'lose':'draw');
@@ -1306,10 +1307,10 @@ function endMatch(forced,note){Snd.intense=false;
   $('#endSets').innerHTML=h;showScreen('end');if(window.onMatchEnd)onMatchEnd(r);Snd.jingle(r);setTimeout(()=>{if(G.state==='over')Snd.play('calm')},1600);
   if(r==='win')for(let i=0;i<4;i++)setTimeout(()=>burst(rand(60,W-60),rand(120,H-120),i%2?COLORS.player.glow:'rgba(255,200,80,'),i*250);
 }
-function leaveMatch(){Snd.intense=false;if(G.mode!=='cpu'&&window.Online)Online.leave();G.mode='cpu';G.state='idle';gc.style.display='none';document.body.classList.remove('playing');$('#pauseBtn').classList.remove('show');Snd.duck(false);Snd.play('calm');showScreen('menu')}
+function leaveMatch(){Snd.intense=false;dropMouse();if(G.mode!=='cpu'&&window.Online)Online.leave();G.mode='cpu';G.state='idle';gc.style.display='none';document.body.classList.remove('playing');$('#pauseBtn').classList.remove('show');Snd.duck(false);Snd.play('calm');showScreen('menu')}
 function pause(){if(G.mode!=='cpu'){if(['intro','play','goal','setEnd','wait'].includes(G.state)&&window.Online)Online.askLeave();return}
-  if(!['intro','play','goal','setEnd'].includes(G.state))return;G.prev=G.state;G.state='paused';document.body.classList.remove('playing');Snd.duck(true);showScreen('pause')}
-function resume(){if(G.state!=='paused')return;G.state=G.prev;document.body.classList.add('playing');Snd.duck(false);showScreen(null)}
+  if(!['intro','play','goal','setEnd'].includes(G.state))return;G.prev=G.state;G.state='paused';document.body.classList.remove('playing');dropMouse();Snd.duck(true);showScreen('pause')}
+function resume(){if(G.state!=='paused')return;G.state=G.prev;document.body.classList.add('playing');Snd.duck(false);showScreen(null);grabMouse()}
 
 function update(dt){
   G.time+=dt;
@@ -1432,13 +1433,29 @@ for(const [id,key] of [['rTime','time'],['rTarget','target'],['rSets','sets']])
 $('#pauseBtn').addEventListener('click',e=>{e.stopPropagation();pause()});
 window.addEventListener('keydown',e=>{
   if(e.key!=='Escape')return;
+  if(performance.now()-PL.lostT<400)return; // this Esc already released the mouse lock
   if(window.onEsc&&onEsc())return;
   if(G.state==='paused')resume();
   else if(['intro','play','goal','setEnd','wait'].includes(G.state))pause();
   else if($('#setup').classList.contains('show'))$('#setup').classList.remove('show');
   else if(['difficulty','customize','settings','friends','pwf'].includes(curScreen)){showScreen('menu');Snd.play('calm')}
 });
-const onPointer=e=>{pointer.moves++;if(!LY.s)return;const u=(e.clientX-LY.ox)/LY.s,v=(e.clientY-LY.oy)/LY.s;
+const PL={on:false,lostT:0};
+function wantLock(){return !MOBILE&&document.body.classList.contains('playing')&&['intro','play','goal','setEnd','wait'].includes(G.state)}
+function grabMouse(){if(!wantLock()||document.pointerLockElement)return;
+  try{const r=gc.requestPointerLock({unadjustedMovement:true});if(r&&r.catch)r.catch(()=>{try{const r2=gc.requestPointerLock();if(r2&&r2.catch)r2.catch(()=>{})}catch(e){}})}catch(e){}}
+function dropMouse(){if(document.pointerLockElement)try{document.exitPointerLock()}catch(e){}}
+function syncPointerToPaddle(){if(PL.on){pointer.x=G.player.x;pointer.y=G.player.y}}
+document.addEventListener('pointerlockchange',()=>{const on=document.pointerLockElement===gc;
+  if(on)syncPointerToPaddle();
+  else if(PL.on&&wantLock()){PL.lostT=performance.now();if(!(window.onEsc&&onEsc()))pause()} // Esc released the mouse: same as pressing Esc
+  PL.on=on});
+window.addEventListener('mousedown',e=>{if(e.button===0&&wantLock()&&e.target===gc)grabMouse()});
+const onPointer=e=>{pointer.moves++;if(!LY.s)return;
+  if(PL.on&&e.pointerType==='mouse'){const du=(e.movementX||0)/LY.s,dv=(e.movementY||0)/LY.s;
+    if(LY.rot){pointer.x+=dv;pointer.y-=du}else{pointer.x+=du;pointer.y+=dv}
+    pointer.x=clamp(pointer.x,0,W);pointer.y=clamp(pointer.y,CENTER,H);return}
+  const u=(e.clientX-LY.ox)/LY.s,v=(e.clientY-LY.oy)/LY.s;
   if(LY.rot){pointer.x=v;pointer.y=H-u}else{pointer.x=u;pointer.y=v-(e.pointerType==='touch'?TOUCH_OFF:0)}};
 window.addEventListener('onpointerrawupdate' in window?'pointerrawupdate':'pointermove',onPointer,{passive:true});if('onpointerrawupdate' in window)window.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')onPointer(e)},{passive:true});window.addEventListener('pointerdown',onPointer,{passive:true});
 window.addEventListener('contextmenu',e=>{if(G.state!=='idle')e.preventDefault()});
