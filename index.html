@@ -118,6 +118,25 @@ body.ko .card .name{font-family:'Black Han Sans',sans-serif}
 .normal{--accent:#ffd36b;--glow:rgba(255,200,80,.6)}
 .hard{--accent:#ff6b7f;--glow:rgba(255,80,110,.7)}
 
+/* phones / short screens: compact cards, scroll when they don't fit */
+.screen.scroll{overflow-y:auto;overflow-x:hidden;justify-content:flex-start;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.screen.scroll>:first-child{margin-top:auto}.screen.scroll>:last-child{margin-bottom:auto}
+.panel{touch-action:pan-y;overscroll-behavior:contain}
+@media (max-width:760px),(max-height:620px){
+  .screen.scroll{gap:12px;padding:14px 12px 18px}
+  .screen.scroll .h{font-size:clamp(24px,7vw,32px)}
+  .cards{gap:10px;flex-direction:column;align-items:center}
+  .card{width:min(420px,94vw);padding:12px 14px;border-radius:12px}
+  .card:hover{transform:none}
+  .card .name{font-size:20px}
+  .card .desc{font-size:13px;margin:3px 0 8px;min-height:0}
+  .meter i{width:22px;height:8px}
+  #padCards .card{display:grid;grid-template-columns:68px 1fr;column-gap:12px;align-items:center;text-align:left}
+  #padCards .card canvas{grid-row:1 / span 4;width:64px;height:64px;margin:0}
+  #padCards .card .desc{margin:2px 0 4px}
+  .stat{grid-template-columns:52px 1fr;font-size:11px;margin-top:4px;gap:8px}
+  .bar{height:7px}
+}
 /* modal */
 .modal{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(2,10,30,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .modal.show{display:flex;animation:fadeIn .25s ease}
@@ -166,7 +185,7 @@ body.ko #end .big{font-family:'Black Han Sans',sans-serif}
 </section>
 
 <!-- DIFFICULTY -->
-<section id="difficulty" class="screen">
+<section id="difficulty" class="screen scroll">
   <div class="h" data-i="chooseDiff">Choose difficulty</div>
   <div class="cards">
     <div class="card easy" data-level="easy"><div class="name" data-i="easy">Easy</div><div class="desc" data-i="easyD"></div><div class="meter"><i class="f"></i><i></i><i></i></div></div>
@@ -201,7 +220,7 @@ body.ko #end .big{font-family:'Black Han Sans',sans-serif}
 </div>
 
 <!-- CUSTOMIZE -->
-<section id="customize" class="screen">
+<section id="customize" class="screen scroll">
   <div class="h" data-i="yourPaddle">Your paddle</div>
   <div class="cards" id="padCards">
     <div class="card" data-pad="normal"><canvas width="240" height="240"></canvas><div class="name" data-i="pNormal">Normal</div><div class="desc" data-i="pNormalD"></div><div class="stat"><span data-i="size">Size</span><div class="bar"><span style="width:62%"></span></div></div><div class="stat"><span data-i="speed">Speed</span><div class="bar"><span style="width:65%"></span></div></div></div>
@@ -212,7 +231,7 @@ body.ko #end .big{font-family:'Black Han Sans',sans-serif}
 </section>
 
 <!-- SETTINGS -->
-<section id="settings" class="screen">
+<section id="settings" class="screen scroll">
   <div class="panel">
     <div class="h" data-i="settings">Settings</div>
     <div class="lbl"><span data-i="language">Language</span></div>
@@ -221,6 +240,8 @@ body.ko #end .big{font-family:'Black Han Sans',sans-serif}
     <div class="seg"><button class="btn" data-sound="1"><span data-i="on">On</span></button><button class="btn" data-sound="0"><span data-i="off">Off</span></button></div>
     <div class="lbl"><span data-i="orientation">Screen</span></div>
     <div class="seg"><button class="btn" data-orient="auto"><span data-i="oAuto">Auto</span></button><button class="btn" data-orient="landscape"><span data-i="oLand">Landscape</span></button><button class="btn" data-orient="portrait"><span data-i="oPort">Portrait</span></button></div>
+    <div class="lbl"><span data-i="fps">Frame rate</span><b id="vFps"></b></div>
+    <div class="seg"><button class="btn" data-fps="30"><span>30</span></button><button class="btn" data-fps="60"><span>60</span></button><button class="btn" data-fps="90"><span>90</span></button><button class="btn" data-fps="120"><span>120</span></button><button class="btn" data-fps="0"><span data-i="fpsMax">Max</span></button></div>
     <div class="actions"><button class="btn small" data-act="back"><span data-i="back">Back</span></button></div>
   </div>
 </section>
@@ -263,6 +284,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t, rand=(a,b)=>a+Math.random()*(b-a);
 
 /* ---------- table constants (logical units) ---------- */
+const MOBILE=matchMedia('(pointer: coarse)').matches;
 const W=420, H=735, CENTER=H/2, GOAL_W=143, PUCK_R=12.75, RAIL=20; // v2: table +5%, goal +5%, pieces -15%
 const GL=W/2-GOAL_W/2, GR=W/2+GOAL_W/2;
 const PUCK_MAX=1500, FRICTION=0.16, WALL_E=0.9, TOUCH_OFF=48;
@@ -281,6 +303,7 @@ const settings={
   lang:store.get('lang',(navigator.language||'en').toLowerCase().startsWith('ko')?'ko':'en'),
   sound:store.get('sound',true),
   orient:store.get('orient','auto'),
+  fps:store.get('fps',0), // 0 = as fast as the screen allows
   paddle:store.get('paddle','normal'),
   setup:Object.assign({time:120,target:7,sets:1,cpuSize:'medium'},store.get('setup',{}))
 };
@@ -294,7 +317,7 @@ const T={
   cpuPaddle:'Computer paddle',small:'Small',medium:'Medium',big:'Big',random:'Random',start:'Start',
   yourPaddle:'Your paddle',pNormal:'Normal',pSmall:'Small',pBig:'Big',
   pNormalD:'Balanced size and speed.',pSmallD:'Tiny but lightning fast.',pBigD:'A huge wall, but heavy.',
-  size:'Size',speed:'Speed',language:'Language',sound:'Sound',on:'On',off:'Off',orientation:'Screen',oAuto:'Auto',oLand:'Landscape',oPort:'Portrait',
+  size:'Size',speed:'Speed',language:'Language',sound:'Sound',on:'On',off:'Off',orientation:'Screen',oAuto:'Auto',oLand:'Landscape',oPort:'Portrait',fps:'Frame rate',fpsMax:'Max',fpsNow:'now {n} fps',
   paused:'Paused',resume:'Resume',quitMenu:'Quit to menu',escHint:'Press Esc to resume',
   goal:'GOAL!',cpuGoal:'CPU SCORES',youWin:'YOU WIN!',youLose:'YOU LOSE',draw:'DRAW',rematch:'Rematch',menu:'Menu',
   set:'SET',setOf:'SET {n} / {m}',you:'YOU',cpu:'CPU',timeUp:"TIME'S UP",ready:'READY',go:'GO!',
@@ -309,7 +332,7 @@ const T={
   cpuPaddle:'컴퓨터 패들 크기',small:'작게',medium:'중간',big:'크게',random:'무작위',start:'시작',
   yourPaddle:'내 패들',pNormal:'기본',pSmall:'작은 패들',pBig:'큰 패들',
   pNormalD:'크기와 속도의 균형.',pSmallD:'작지만 번개처럼 빨라요.',pBigD:'거대한 벽, 하지만 무거워요.',
-  size:'크기',speed:'속도',language:'언어',sound:'소리',on:'켜기',off:'끄기',orientation:'화면 방향',oAuto:'자동',oLand:'가로',oPort:'세로',
+  size:'크기',speed:'속도',language:'언어',sound:'소리',on:'켜기',off:'끄기',orientation:'화면 방향',oAuto:'자동',oLand:'가로',oPort:'세로',fps:'프레임',fpsMax:'최대',fpsNow:'현재 {n} fps',
   paused:'일시정지',resume:'계속하기',quitMenu:'메뉴로 나가기',escHint:'Esc를 누르면 계속합니다',
   goal:'골!',cpuGoal:'컴퓨터 득점',youWin:'승리!',youLose:'패배',draw:'무승부',rematch:'재대결',menu:'메뉴',
   set:'세트',setOf:'{n}세트 / {m}',you:'나',cpu:'컴퓨터',timeUp:'시간 종료',ready:'준비',go:'시작!',
@@ -422,7 +445,7 @@ window.addEventListener('pointerdown',unlock);window.addEventListener('keydown',
    ===================================================================== */
 const bg=$('#bg'),bgx=bg.getContext('2d');let bgStatic=null,snow=[],BGW=0,BGH=0,BGD=1;
 function buildBg(){
-  BGD=Math.min(2,devicePixelRatio||1);BGW=innerWidth;BGH=innerHeight;
+  BGD=Math.min(MOBILE?1.5:2,devicePixelRatio||1);BGW=innerWidth;BGH=innerHeight;
   bg.width=BGW*BGD;bg.height=BGH*BGD;bg.style.width=BGW+'px';bg.style.height=BGH+'px';
   const c=document.createElement('canvas');c.width=bg.width;c.height=bg.height;const x=c.getContext('2d');x.scale(BGD,BGD);
   const w=BGW,h=BGH,hz=h*.44;
@@ -483,7 +506,7 @@ function rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);
 const gc=$('#game'),gx=gc.getContext('2d',{desynchronized:true});let LY={},tableImg=null;
 const COLORS={player:{a:'#7ee8ff',b:'#1aa0f0',c:'#0a4fa8',glow:'rgba(80,200,255,'},cpu:{a:'#ffb0b8',b:'#ff4d5e',c:'#a0122a',glow:'rgba(255,70,100,'}};
 function layout(){
-  const dpr=Math.min(2,devicePixelRatio||1),cw=innerWidth,ch=innerHeight,hud=clamp(ch*.085,50,74),pad=10;
+  const dpr=Math.min(MOBILE?1.5:2,devicePixelRatio||1),cw=innerWidth,ch=innerHeight,hud=clamp(ch*.085,50,74),pad=10;
   const rot=settings.orient==='landscape'?true:settings.orient==='portrait'?false:cw>ch*1.05; // landscape: table sideways (you on the left)
   const sw=rot?H:W,sh=rot?W:H;
   const s=Math.min((cw-pad*2)/(sw+RAIL*2),(ch-hud-pad*2)/(sh+RAIL*2));
@@ -858,6 +881,7 @@ let curScreen='menu',pendingLevel='normal';
 function showScreen(id){curScreen=id;$$('.screen').forEach(s=>s.classList.toggle('show',s.id===id));$('#setup').classList.remove('show')}
 function syncSettingsUI(){
   $$('[data-lang]').forEach(b=>b.classList.toggle('on',b.dataset.lang===settings.lang));
+  $$('[data-fps]').forEach(b=>b.classList.toggle('on',+b.dataset.fps===settings.fps));
   $$('[data-orient]').forEach(b=>b.classList.toggle('on',b.dataset.orient===settings.orient));
   $$('[data-sound]').forEach(b=>b.classList.toggle('on',(b.dataset.sound==='1')===!!settings.sound));
   $$('#padCards .card').forEach(c=>c.classList.toggle('sel',c.dataset.pad===settings.paddle));
@@ -869,12 +893,13 @@ function syncSettingsUI(){
 function drawPreviews(){$$('#padCards .card').forEach(c=>{const cv=c.querySelector('canvas'),x=cv.getContext('2d');x.clearRect(0,0,240,240);
   const r=PLAYER_TYPES[c.dataset.pad].r;x.save();x.translate(120,120);x.scale(2.4,2.4);drawPaddle(x,{x:0,y:0,r},COLORS.player);x.restore()})}
 document.addEventListener('click',e=>{
-  const b=e.target.closest('[data-act],[data-level],[data-pad],[data-lang],[data-sound],[data-size],[data-orient]');if(!b)return;Snd.init();Snd.ui();
+  const b=e.target.closest('[data-act],[data-level],[data-pad],[data-lang],[data-sound],[data-size],[data-orient],[data-fps]');if(!b)return;Snd.init();Snd.ui();
   const a=b.dataset.act;
   if(b.dataset.level){pendingLevel=b.dataset.level;syncSettingsUI();$('#setup').classList.add('show');return}
   if(b.dataset.pad){settings.paddle=b.dataset.pad;store.set('paddle',settings.paddle);syncSettingsUI();return}
   if(b.dataset.lang){settings.lang=b.dataset.lang;store.set('lang',settings.lang);applyLang();return}
   if(b.dataset.sound){settings.sound=b.dataset.sound==='1';store.set('sound',settings.sound);Snd.setOn(settings.sound);syncSettingsUI();return}
+  if(b.dataset.fps){settings.fps=+b.dataset.fps;store.set('fps',settings.fps);nextDraw=0;syncSettingsUI();return}
   if(b.dataset.orient){settings.orient=b.dataset.orient;store.set('orient',settings.orient);layout();buildArena();syncSettingsUI();return}
   if(b.dataset.size){settings.setup.cpuSize=b.dataset.size;store.set('setup',settings.setup);syncSettingsUI();return}
   switch(a){
@@ -911,11 +936,17 @@ window.addEventListener('resize',()=>{layout();buildArena();buildBg()});
 
 /* ---------- main loop ---------- */
 let last=performance.now();
+let nextDraw=0,fpsN=0,fpsT=0,fpsNow=0;
 function frame(now){
-  const dt=Math.min(.033,Math.max(0,(now-last)/1000));last=now;
+  requestAnimationFrame(frame);
+  if(settings.fps){const iv=1000/settings.fps;
+    if(now<nextDraw-2)return;           // too early: skip this screen refresh
+    nextDraw=Math.max(nextDraw+iv,now+iv*.5)}
+  const dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;
+  fpsN++;if(now-fpsT>=500){fpsNow=Math.round(fpsN*1000/(now-fpsT));fpsN=0;fpsT=now;
+    if(curScreen==='settings')$('#vFps').textContent=t('fpsNow',{n:fpsNow})}
   update(dt);
   if(gc.style.display==='block')render();else drawBg(dt,now/1000);
-  requestAnimationFrame(frame);
 }
 layout();buildArena();buildBg();applyLang();Snd.play('calm');
 document.fonts&&document.fonts.ready.then(()=>{});
