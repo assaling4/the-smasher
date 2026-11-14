@@ -609,6 +609,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t, rand=(a,b)=>a+Math.
 const MOBILE=matchMedia('(pointer: coarse)').matches;
 const W=420, H=735, CENTER=H/2, GOAL_W=143, PUCK_R=12.75, RAIL=20; // v2: table +5%, goal +5%, pieces -15%
 const GL=W/2-GOAL_W/2, GR=W/2+GOAL_W/2;
+const FORWARD_PULL=.4; // 0 = pure bounce angle, 1 = always straight at the goal
 const PUCK_MAX=1500, FRICTION=0.16, WALL_E=0.9, TOUCH_OFF=48;
 const PLAYER_TYPES={normal:{r:27.2,speed:5200},small:{r:21.25,speed:6800},big:{r:35.7,speed:3800}};
 const CPU_SIZES={small:{r:21.25,mult:1.15},medium:{r:27.2,mult:1},big:{r:35.7,mult:.82}};
@@ -1062,6 +1063,10 @@ function collide(pd,who){
     const ps=Math.hypot(pd.vx,pd.vy);
     const target=clamp(Math.max(ps*1.05,s*.75),0,PUCK_MAX);
     if(s<1){vx=nx;vy=ny;s=1}
+    // aim assist: pull the shot toward the opponent's goal so hits fly more straight forward
+    {const fy=pd.top?1:-1,dx=vx/s,dy=vy/s;
+      if(dy*fy>-.25){const gx=(W/2-p.x),gy=(pd.top?H:0)-p.y,gl=Math.hypot(gx,gy)||1,k=FORWARD_PULL;
+        let ax=dx*(1-k)+gx/gl*k,ay=dy*(1-k)+gy/gl*k;const al=Math.hypot(ax,ay)||1;vx=ax/al*s;vy=ay/al*s}}
     p.vx=vx/s*target;p.vy=vy/s*target;p.last=who;
     hitFx(who,p.x-nx*PUCK_R,p.y-ny*PUCK_R,target);
     if(G.mode==='host')G.fxq.push(['h',who==='player'?1:0,Math.round(p.x-nx*PUCK_R),Math.round(p.y-ny*PUCK_R),Math.round(target)]);
